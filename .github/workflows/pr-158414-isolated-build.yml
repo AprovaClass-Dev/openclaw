@@ -57,7 +57,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts smoke-prefix smoke-state
-          corepack pnpm pack --config.node-linker=hoisted --pack-destination artifacts
+          node scripts/package-openclaw-for-docker.mjs \
+            --allow-unreleased-changelog \
+            --skip-build \
+            --output-dir artifacts \
+            --output-name openclaw-pr-158414-9faa93d.tgz
           TGZ="$(find artifacts -maxdepth 1 -type f -name '*.tgz' -print -quit)"
           test -n "$TGZ"
           sha256sum "$TGZ" | tee artifacts/ARTIFACT.sha256
