@@ -70,7 +70,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TGZ="$(find artifacts -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          TGZ="$(find "$PWD/artifacts" -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          test -n "$TGZ"
           npm install -g --prefix "$PWD/smoke-prefix" "$TGZ"
           "$PWD/smoke-prefix/bin/openclaw" --version | tee artifacts/smoke-version.txt
           OPENCLAW_STATE_DIR="$PWD/smoke-state" \
