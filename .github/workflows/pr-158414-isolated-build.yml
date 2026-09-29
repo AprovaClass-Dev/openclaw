@@ -1,0 +1,81 @@
+name: PR 158414 isolated build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout exact upstream commit
+        uses: actions/checkout@v4
+        with:
+          repository: openclaw/openclaw
+          ref: 9faa93d44c85d807d3c73db2420f4e85c24d3784
+          fetch-depth: 1
+
+      - name: Verify provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "9faa93d44c85d807d3c73db2420f4e85c24d3784"
+          git show -s --format='%H %cI %s'
+          free -h
+          df -h .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+
+      - name: Enable pinned pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Build full runtime
+        env:
+          OPENCLAW_TSDOWN_MAX_OLD_SPACE_MB: "6144"
+        run: corepack pnpm build
+
+      - name: Run focused PR gates
+        run: |
+          node scripts/run-vitest.mjs run \
+            src/plugins/plugin-generation-artifact.streaming.test.ts \
+            src/plugins/plugin-source-capture-directory.test.ts \
+            src/plugins/plugin-source-capture-recovery.test.ts \
+            src/agents/prepared-model-catalog-worker.native-renewal.integration.test.ts \
+            --maxWorkers=1 --no-file-parallelism
+
+      - name: Pack and hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts smoke-prefix smoke-state
+          corepack pnpm pack --pack-destination artifacts
+          TGZ="$(find artifacts -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          test -n "$TGZ"
+          sha256sum "$TGZ" | tee artifacts/ARTIFACT.sha256
+
+      - name: Smoke install isolated artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          TGZ="$(find artifacts -maxdepth 1 -type f -name '*.tgz' -print -quit)"
+          npm install -g --prefix "$PWD/smoke-prefix" "$TGZ"
+          "$PWD/smoke-prefix/bin/openclaw" --version | tee artifacts/smoke-version.txt
+          OPENCLAW_STATE_DIR="$PWD/smoke-state" \
+            "$PWD/smoke-prefix/bin/openclaw" plugins list --json > artifacts/smoke-plugins.json
+
+      - name: Upload verified artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openclaw-pr-158414-9faa93d
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 7
