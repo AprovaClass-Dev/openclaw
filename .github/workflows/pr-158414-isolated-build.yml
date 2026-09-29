@@ -38,10 +38,10 @@ jobs:
       - name: Install dependencies
         run: corepack pnpm install --frozen-lockfile
 
-      - name: Build full runtime
+      - name: Build full runtime serially
         env:
           OPENCLAW_TSDOWN_MAX_OLD_SPACE_MB: "6144"
-        run: corepack pnpm build
+        run: taskset -c 0 corepack pnpm build
 
       - name: Run focused PR gates
         run: |
